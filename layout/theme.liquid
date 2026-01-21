@@ -44,7 +44,14 @@
       {% sections 'header-group' %}
     </div>
 
-    <h6>Hello Vs Code</h6>
+    {% comment %} <h6>Hello Vs Code</h6> {% endcomment %}
+    <pre>
+      {% if request.design_mode %}
+        <p>Design Mode is enabled.</p>
+        {% else %}
+          <p>Design Mode is disabled.</p>
+        {% endif %}
+    </pre>
 
     <script>
       // Inline header height calculation to prevent layout shift
