@@ -10,7 +10,7 @@
     {% if section.settings.title != blank %}
       <h1
         class="hero-title"
-        style="font-size: {{ section.settings.title_size }}px;"
+        style="font-size: {{ section.settings.title_size }}px; text-align: {{ section.settings.title_alignment }};"
       >
         {{ section.settings.title }}
       </h1>
@@ -101,9 +101,21 @@
   "settings": [
     { "type": "text", "id": "title", "label": "Title", "default": "Welcome to Our Store" },
     { "type": "range", "id": "title_size", "label": "Title Font Size", "min": 24, "max": 72, "default": 42 },
-
-    { "type": "color", "id": "text_color", "label": "Default Text Color", "default": "#ffffff" },
-    { "type": "color", "id": "bg_color", "label": "Background Color", "default": "#0f172a" },
+    {
+      "type": "select",
+      "id": "title_alignment",
+      "label": "Title Alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Center" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "center"
+    }
+,    
+    
+    { "type": "color", "id": "text_color", "label": "Default Text Color", "default": "#000000" },
+    { "type": "color", "id": "bg_color", "label": "Background Color", "default": "#f2f2f2" },
 
     { "type": "range", "id": "padding_top", "label": "Padding Top", "min": 20, "max": 101, "default": 80 },
     { "type": "range", "id": "padding_bottom", "label": "Padding Bottom", "min": 20, "max": 101, "default": 80 },
@@ -139,7 +151,7 @@
         },
 
         { "type": "color", "id": "bg_color", "label": "Block Background", "default": "rgba(255,255,255,0.08)" },
-        { "type": "color", "id": "text_color", "label": "Block Text Color", "default": "#ffffff" },
+        { "type": "color", "id": "text_color", "label": "Block Text Color", "default": "#000000" },
 
         { "type": "range", "id": "radius", "label": "Border Radius", "min": 0, "max": 40, "default": 16 },
         { "type": "range", "id": "padding", "label": "Padding", "min": 10, "max": 60, "default": 20 },

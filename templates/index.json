@@ -283,10 +283,43 @@
         "padding-block-start": 48,
         "padding-block-end": 48
       }
+    },
+    "helloworld_1": {
+      "type": "helloworld",
+      "settings": {
+        "title": "Welcome to Our Store"
+      },
+      "blocks": {
+        "slide_1": {
+          "type": "slide",
+          "settings": {
+            "heading": "Premium Quality",
+            "text": "Experience the best products crafted for you."
+          }
+        },
+        "slide_2": {
+          "type": "slide",
+          "settings": {
+            "heading": "Fast Delivery",
+            "text": "Quick and reliable shipping worldwide."
+          }
+        },
+        "slide_3": {
+          "type": "slide",
+          "settings": {
+            "heading": "24/7 Support",
+            "text": "Our team is always here to help you."
+          }
+        }
+      },
+      "block_order": ["slide_1", "slide_2", "slide_3"]
+
     }
   },
   "order": [
     "hero_jVaWmY",
-    "product_list_fa6P9H"
+    "product_list_fa6P9H",
+    "helloworld_1",
   ]
+
 }
