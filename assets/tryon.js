@@ -130,6 +130,15 @@ const TryOn = (() => {
     cameraInstance.start();
   }
 
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // Fetch any image (including protocol-relative Shopify CDN URLs) and return a Blob
+  async function fetchImageAsBlob(url) {
+    // Fix protocol-relative URLs like //cdn.shopify.com/...
+    const fullUrl = url.startsWith('//') ? 'https:' + url : url;
+    const res = await fetch(fullUrl);
+    return res.blob();
+  }
+
   // ── Capture & API call ───────────────────────────────────────────────────────
   async function captureAndSend() {
     if (captured) return;
@@ -141,8 +150,8 @@ const TryOn = (() => {
     canvas.height = video.videoHeight;
     canvas.getContext('2d').drawImage(video, 0, 0);
 
-    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.95));
-    capturedBlobUrl = URL.createObjectURL(blob);
+    const personBlob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.95));
+    capturedBlobUrl = URL.createObjectURL(personBlob);
 
     // Show captured still instead of live video
     const capturedImg = $('tryon-captured');
@@ -152,12 +161,34 @@ const TryOn = (() => {
 
     setStatus(`Generating AI Try-On in ${quality} quality...`);
 
+    // Fetch jewellery image as blob in the browser so the server never needs to
+    // resolve a Shopify CDN URL (which can be protocol-relative or CORS-restricted)
+    let jewelleryBlob = null;
+    if (jewelleryImage) {
+      try {
+        jewelleryBlob = await fetchImageAsBlob(jewelleryImage);
+      } catch {
+        // If fetch fails, fall back to sending the URL string
+        jewelleryBlob = null;
+      }
+    }
+
     const formData = new FormData();
-    formData.append('person', blob, 'hand.jpg');
+    formData.append('person', personBlob, 'hand.jpg');
     formData.append('type', jewelleryType);
     formData.append('index', jewelleryIndex);
     formData.append('quality', quality);
-    if (jewelleryImage) formData.append('jewellery_url', jewelleryImage);
+
+    const fullUrl = jewelleryImage
+      ? (jewelleryImage.startsWith('//') ? 'https:' + jewelleryImage : jewelleryImage)
+      : null;
+
+    if (jewelleryBlob) {
+      formData.append('jewellery', jewelleryBlob, 'jewellery.jpg');
+    }
+    if (fullUrl) {
+      formData.append('jewellery_url', fullUrl);
+    }
 
     try {
       const res = await fetch(`${API}/api/generate-jewellery-tryon`, {

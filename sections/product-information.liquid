@@ -177,7 +177,7 @@
   additional_blocks: additional_blocks
 %}
 
-{%- assign product_image_url = product.featured_image | image_url: width: 800 -%}
+{%- assign product_image_url = product.featured_image | image_url: width: 800 | prepend: 'https:' -%}
 <div class="tryon-btn-wrapper" style="padding: 0 var(--padding-lg) var(--padding-lg);">
   <button
     class="tryon-open-btn"
