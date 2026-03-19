@@ -1,0 +1,121 @@
+<!-- TryOn Modal -->
+<div id="tryon-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#0a0a0f 0%,#12101a 40%,#0d0d14 100%);" aria-modal="true" role="dialog">
+
+  <!-- Ambient blobs -->
+  <div style="pointer-events:none;position:absolute;inset:0;overflow:hidden;">
+    <div style="position:absolute;top:-8rem;left:-8rem;width:24rem;height:24rem;border-radius:9999px;opacity:.2;background:radial-gradient(circle,#c9a84c 0%,transparent 70%);"></div>
+    <div style="position:absolute;bottom:-8rem;right:-8rem;width:24rem;height:24rem;border-radius:9999px;opacity:.15;background:radial-gradient(circle,#7c5cbf 0%,transparent 70%);"></div>
+  </div>
+
+  <!-- Camera view (shown while capturing) -->
+  <div id="tryon-camera-view" style="position:relative;z-index:1;display:flex;flex-direction:column;height:100%;">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.5rem;border-bottom:1px solid rgba(201,168,76,.15);">
+      <div style="display:flex;align-items:center;gap:.75rem;">
+        <div id="tryon-pulse-dot" style="width:.5rem;height:.5rem;border-radius:9999px;background:#c9a84c;animation:tryon-pulse 1.5s infinite;"></div>
+        <span style="font-size:.65rem;font-weight:900;text-transform:uppercase;letter-spacing:.25em;color:#c9a84c;">AI Jewellery Try-On</span>
+        <span id="tryon-quality-badge" style="font-size:.6rem;padding:.15rem .5rem;border-radius:9999px;background:rgba(201,168,76,.15);color:#c9a84c;border:1px solid rgba(201,168,76,.3);">1K</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:.5rem;">
+        <!-- Quality selector -->
+        <div style="position:relative;">
+          <button id="tryon-quality-btn" onclick="TryOn.toggleQuality()" style="display:flex;align-items:center;gap:.4rem;padding:.4rem .8rem;border-radius:.5rem;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;font-size:.75rem;cursor:pointer;">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            Quality: <span id="tryon-quality-label">1K</span>
+            <svg id="tryon-quality-arrow" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transition:transform .2s;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div id="tryon-quality-menu" style="display:none;position:absolute;top:calc(100% + .5rem);left:0;width:14rem;border-radius:.75rem;overflow:hidden;background:rgba(0,0,0,.92);border:1px solid rgba(255,255,255,.15);backdrop-filter:blur(20px);z-index:10;">
+            <button onclick="TryOn.setQuality('1K')" data-q="1K" style="width:100%;padding:.75rem 1rem;text-align:left;background:transparent;border:none;color:#fff;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background='transparent'">
+              <div><div style="font-weight:600;">1K</div><div style="font-size:.7rem;color:rgba(255,255,255,.5);">Fast &amp; Standard</div></div>
+              <span class="tryon-q-check" data-q="1K" style="color:#4ade80;display:none;">✓</span>
+            </button>
+            <button onclick="TryOn.setQuality('2K')" data-q="2K" style="width:100%;padding:.75rem 1rem;text-align:left;background:transparent;border:none;color:#fff;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background='transparent'">
+              <div><div style="font-weight:600;">2K</div><div style="font-size:.7rem;color:rgba(255,255,255,.5);">High Quality</div></div>
+              <span class="tryon-q-check" data-q="2K" style="color:#4ade80;display:none;">✓</span>
+            </button>
+            <button onclick="TryOn.setQuality('4K')" data-q="4K" style="width:100%;padding:.75rem 1rem;text-align:left;background:transparent;border:none;color:#fff;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background='transparent'">
+              <div><div style="font-weight:600;">4K</div><div style="font-size:.7rem;color:rgba(255,255,255,.5);">Ultra HD</div></div>
+              <span class="tryon-q-check" data-q="4K" style="color:#4ade80;display:none;">✓</span>
+            </button>
+          </div>
+        </div>
+        <button onclick="TryOn.close()" style="width:2.25rem;height:2.25rem;display:flex;align-items:center;justify-content:center;border-radius:9999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.5);cursor:pointer;font-size:1rem;transition:all .2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,.5)'">✕</button>
+      </div>
+    </div>
+
+    <!-- Video / captured preview -->
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:1.5rem;position:relative;">
+      <div style="position:relative;">
+        <video id="tryon-video" autoplay playsinline muted style="width:500px;max-width:90vw;border-radius:.75rem;border:4px solid #4b5563;display:block;"></video>
+        <img id="tryon-captured" src="" alt="Captured" style="display:none;width:500px;max-width:90vw;border-radius:.75rem;border:4px solid #4b5563;">
+        <canvas id="tryon-canvas" style="display:none;"></canvas>
+        <div id="tryon-status" style="position:absolute;bottom:2.5rem;left:0;right:0;text-align:center;color:#fff;font-size:1rem;text-shadow:0 1px 4px rgba(0,0,0,.8);">Show your hand to camera</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result view (shown after AI generates) -->
+  <div id="tryon-result-view" style="display:none;position:relative;z-index:1;display:none;flex-direction:column;height:100%;">
+
+    <!-- Result header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.5rem;border-bottom:1px solid rgba(201,168,76,.15);">
+      <div style="display:flex;align-items:center;gap:.75rem;">
+        <div style="width:.5rem;height:.5rem;border-radius:9999px;background:#c9a84c;animation:tryon-pulse 1.5s infinite;"></div>
+        <span style="font-size:.65rem;font-weight:900;text-transform:uppercase;letter-spacing:.25em;color:#c9a84c;">AI Jewellery Try-On</span>
+        <span id="tryon-result-quality-badge" style="font-size:.6rem;padding:.15rem .5rem;border-radius:9999px;background:rgba(201,168,76,.15);color:#c9a84c;border:1px solid rgba(201,168,76,.3);">1K</span>
+      </div>
+      <button onclick="TryOn.close()" style="width:2.25rem;height:2.25rem;display:flex;align-items:center;justify-content:center;border-radius:9999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.5);cursor:pointer;font-size:1rem;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,.5)'">✕</button>
+    </div>
+
+    <!-- Result body -->
+    <div style="flex:1;display:flex;min-height:0;padding:1.25rem;gap:1rem;">
+
+      <!-- Left 40%: hand + jewellery + actions -->
+      <div style="width:40%;display:flex;flex-direction:column;gap:1rem;">
+        <div style="flex:1;display:flex;flex-direction:column;gap:.25rem;min-height:0;">
+          <span style="font-size:.6rem;font-weight:900;text-transform:uppercase;letter-spacing:.2em;color:rgba(255,255,255,.4);">📷 Your Hand</span>
+          <div style="flex:1;border-radius:.75rem;overflow:hidden;position:relative;border:1px solid rgba(255,255,255,.08);">
+            <img id="tryon-hand-preview" src="" alt="Your hand" style="width:100%;height:100%;object-fit:cover;">
+            <span style="position:absolute;bottom:.5rem;left:0;right:0;text-align:center;font-size:.55rem;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:rgba(255,255,255,.5);">Original</span>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:.25rem;min-height:0;">
+          <span style="font-size:.6rem;font-weight:900;text-transform:uppercase;letter-spacing:.2em;color:rgba(255,255,255,.4);">💍 Jewellery</span>
+          <div style="flex:1;border-radius:.75rem;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;border:1px solid rgba(201,168,76,.2);background:rgba(201,168,76,.03);">
+            <img id="tryon-jewellery-preview" src="" alt="Jewellery" style="width:100%;height:100%;object-fit:contain;padding:.75rem;">
+            <span style="position:absolute;bottom:.5rem;left:0;right:0;text-align:center;font-size:.55rem;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:rgba(201,168,76,.6);">Selected Piece</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:.5rem;flex-shrink:0;">
+          <button onclick="TryOn.tryAgain()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:.25rem;padding:.625rem;border-radius:.75rem;font-size:.75rem;font-weight:700;color:rgba(255,255,255,.7);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);cursor:pointer;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,.7)'">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Try Again
+          </button>
+          <button onclick="TryOn.close()" style="flex:1;padding:.625rem;border-radius:.75rem;font-size:.75rem;font-weight:700;background:linear-gradient(135deg,#c9a84c,#a8722a);color:#0a0a0f;border:none;cursor:pointer;box-shadow:0 6px 18px rgba(201,168,76,.3);">✦ Pick This Look</button>
+        </div>
+      </div>
+
+      <!-- Right 60%: result image -->
+      <div style="width:60%;display:flex;flex-direction:column;gap:.25rem;min-height:0;">
+        <div style="display:flex;align-items:center;gap:.5rem;">
+          <div style="height:1px;flex:1;background:linear-gradient(to right,rgba(201,168,76,.4),transparent);"></div>
+          <span style="font-size:.6rem;font-weight:900;text-transform:uppercase;letter-spacing:.3em;color:#c9a84c;">✦ Your Look ✦</span>
+          <div style="height:1px;flex:1;background:linear-gradient(to left,rgba(201,168,76,.4),transparent);"></div>
+        </div>
+        <div style="flex:1;min-height:0;border-radius:1rem;overflow:hidden;position:relative;border:1px solid rgba(201,168,76,.25);box-shadow:0 0 40px rgba(201,168,76,.08);">
+          <img id="tryon-result-img" src="" alt="Try-on result" style="width:100%;height:100%;object-fit:contain;background:#0d0d14;">
+          <div style="position:absolute;bottom:.75rem;right:.75rem;padding:.25rem .75rem;border-radius:9999px;font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.15em;background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.3);color:#c9a84c;">AI Generated</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  @keyframes tryon-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .3; }
+  }
+  #tryon-modal * { box-sizing: border-box; }
+</style>
