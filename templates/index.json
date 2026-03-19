@@ -287,7 +287,7 @@
     "helloworld_1": {
       "type": "helloworld",
       "settings": {
-        "title": "Welcome to Our Store"
+        "title": "Welcome to Our Store dev"
       },
       "blocks": {
         "slide_1": {
