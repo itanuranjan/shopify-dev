@@ -1,0 +1,579 @@
+import React, { useRef, useEffect, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { Hands } from "@mediapipe/hands";
+import { Camera } from "@mediapipe/camera_utils";
+
+import { API_BASE } from "../config";
+const API = API_BASE || "http://127.0.0.1:6050";
+
+const TryOn = ({
+  onClose,
+  index = 1,
+  type: propType,
+  jewelleryImage: propJewelleryImage,
+}) => {
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  // Get jewelry URL from query parameter or props
+  const jewelleryUrlFromQuery = searchParams.get("url");
+  const jewelleryImage = jewelleryUrlFromQuery
+    ? decodeURIComponent(jewelleryUrlFromQuery).trim()
+    : propJewelleryImage;
+
+  const type = propType || location.state?.type || "ring";
+
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+
+  const timerRef = useRef(null);
+  const prevLandmarksRef = useRef(null);
+
+  // Quality state with localStorage persistence
+  const [quality, setQuality] = useState(() => {
+    const savedQuality = localStorage.getItem("jewellery_tryon_quality");
+    return savedQuality || "1K";
+  });
+
+  const [status, setStatus] = useState("Show your hand to camera");
+  const [result, setResult] = useState(null);
+  const [allResults, setAllResults] = useState([]);
+  const [capturedPreview, setCapturedPreview] = useState(null);
+  const [jewelleryPreview, setJewelleryPreview] = useState(null);
+  const [showQualityMenu, setShowQualityMenu] = useState(false);
+
+  const capturedRef = useRef(false);
+
+  // Save quality preference to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem("jewellery_tryon_quality", quality);
+    console.log("Quality preference saved:", quality);
+  }, [quality]);
+
+  const qualityOptions = [
+    { value: "1K", label: "1K", description: "Fast & Standard" },
+    { value: "2K", label: "2K", description: "High Quality" },
+    { value: "4K", label: "4K", description: "Ultra HD" },
+  ];
+
+  useEffect(() => {
+    if (jewelleryUrlFromQuery) {
+      console.log("Jewellery URL from query:", jewelleryImage);
+    }
+
+    startCamera();
+
+    const hands = new Hands({
+      locateFile: (file) =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7,
+    });
+
+    hands.onResults((results) => {
+      if (capturedRef.current) return;
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length) {
+        const landmarks = results.multiHandLandmarks[0];
+
+        const wrist = landmarks[0];
+        const ringFinger = landmarks[16];
+
+        const target = type === "bracelet" ? wrist : ringFinger;
+
+        if (!target) {
+          setStatus("Show your hand clearly");
+          return;
+        }
+
+        if (prevLandmarksRef.current) {
+          const dx = target.x - prevLandmarksRef.current.x;
+          const dy = target.y - prevLandmarksRef.current.y;
+
+          const movement = Math.sqrt(dx * dx + dy * dy);
+
+          if (movement > 0.02) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
+
+            setStatus("Hold your hand steady");
+
+            prevLandmarksRef.current = target;
+            return;
+          }
+        }
+
+        prevLandmarksRef.current = target;
+
+        if (!timerRef.current) {
+          setStatus("Hold still... capturing in 3 seconds");
+
+          timerRef.current = setTimeout(() => {
+            captureAndSend();
+          }, 3000);
+        }
+      } else {
+        setStatus("Show your hand to camera");
+
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    });
+
+    if (videoRef.current) {
+      const camera = new Camera(videoRef.current, {
+        onFrame: async () => {
+          await hands.send({ image: videoRef.current });
+        },
+
+        width: 640,
+        height: 480,
+      });
+
+      camera.start();
+    }
+
+    return () => {
+      clearTimeout(timerRef.current);
+
+      if (videoRef.current?.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+      });
+
+      const video = videoRef.current;
+
+      video.srcObject = stream;
+
+      video.onloadedmetadata = () => {
+        video.play();
+
+        setStatus("Show your hand clearly");
+      };
+    } catch {
+      setStatus("Camera access denied");
+    }
+  };
+
+  const captureAndSend = async () => {
+    if (capturedRef.current) return;
+    capturedRef.current = true;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+
+    ctx.drawImage(video, 0, 0);
+
+    const blob = await new Promise((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.95),
+    );
+
+    const previewUrl = URL.createObjectURL(blob);
+    setCapturedPreview(previewUrl);
+    if (jewelleryImage) setJewelleryPreview(jewelleryImage);
+
+    const formData = new FormData();
+
+    formData.append("person", blob, "hand.jpg");
+    formData.append("type", type);
+    formData.append("index", index);
+    formData.append("quality", quality); // Add quality parameter
+    if (jewelleryImage) {
+      formData.append("jewellery_url", jewelleryImage);
+    }
+
+    setStatus(`Generating AI Try-On in ${quality} quality...`);
+
+    try {
+      const res = await fetch(`${API}/api/generate-jewellery-tryon`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setResult(data.result_url);
+        setAllResults(data.result_urls || [data.result_url]);
+      } else {
+        setStatus("Try-On Failed");
+        capturedRef.current = false;
+      }
+    } catch {
+      setStatus("Server Error");
+      capturedRef.current = false;
+    }
+  };
+
+  if (result) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex flex-col"
+        style={{
+          background:
+            "linear-gradient(135deg,#0a0a0f 0%,#12101a 40%,#0d0d14 100%)",
+        }}
+      >
+        {/* Ambient glow blobs */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div
+            className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-20"
+            style={{
+              background: "radial-gradient(circle,#c9a84c 0%,transparent 70%)",
+            }}
+          />
+          <div
+            className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full opacity-15"
+            style={{
+              background: "radial-gradient(circle,#7c5cbf 0%,transparent 70%)",
+            }}
+          />
+        </div>
+
+        {/* Header */}
+        <div
+          className="relative z-10 flex items-center justify-between px-6 py-4 border-b"
+          style={{ borderColor: "rgba(201,168,76,0.15)" }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span
+              className="text-xs font-black uppercase tracking-[0.25em]"
+              style={{ color: "#c9a84c" }}
+            >
+              AI Jewellery Try-On
+            </span>
+            <span
+              className="text-[10px] px-2 py-0.5 rounded-full"
+              style={{
+                background: "rgba(201,168,76,0.15)",
+                color: "#c9a84c",
+                border: "1px solid rgba(201,168,76,0.3)",
+              }}
+            >
+              {quality}
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-9 h-9 flex items-center justify-center rounded-full text-white/50 hover:text-white transition-all hover:rotate-90"
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.1)",
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Body — horizontal split */}
+        <div className="relative z-10 flex-1 flex min-h-0 p-5 gap-4">
+          {/* LEFT 40% — Person (top 50%) + Jewellery (bottom 50%) */}
+          <div className="flex flex-col gap-4" style={{ width: "40%" }}>
+            {/* Person */}
+            <div className="flex-1 flex flex-col gap-1 min-h-0">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">
+                📷 Your Hand
+              </span>
+              <div
+                className="flex-1 rounded-xl overflow-hidden relative"
+                style={{ border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                {capturedPreview ? (
+                  <img
+                    src={capturedPreview}
+                    className="w-full h-full object-cover"
+                    alt="Your hand"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-white/20 text-xs">
+                    No preview
+                  </div>
+                )}
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background:
+                      "linear-gradient(to top,rgba(0,0,0,0.5) 0%,transparent 50%)",
+                  }}
+                />
+                <span className="absolute bottom-2 left-0 right-0 text-center text-[9px] font-bold uppercase tracking-widest text-white/50">
+                  Original
+                </span>
+              </div>
+            </div>
+
+            {/* Jewellery */}
+            <div className="flex-1 flex flex-col gap-1 min-h-0">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">
+                💍 Jewellery
+              </span>
+              <div
+                className="flex-1 rounded-xl overflow-hidden relative flex items-center justify-center"
+                style={{
+                  border: "1px solid rgba(201,168,76,0.2)",
+                  background: "rgba(201,168,76,0.03)",
+                }}
+              >
+                {jewelleryPreview ? (
+                  <img
+                    src={jewelleryPreview}
+                    className="w-full h-full object-contain p-3"
+                    alt="Jewellery"
+                  />
+                ) : (
+                  <div className="text-white/20 text-xs capitalize">{type}</div>
+                )}
+                <span
+                  className="absolute bottom-2 left-0 right-0 text-center text-[9px] font-bold uppercase tracking-widest"
+                  style={{ color: "rgba(201,168,76,0.6)" }}
+                >
+                  Selected Piece
+                </span>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                onClick={() => {
+                  setResult(null);
+                  setAllResults([]);
+                  setCapturedPreview(null);
+                  setJewelleryPreview(null);
+                  capturedRef.current = false;
+                  startCamera();
+                }}
+                className="flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-bold text-white/70 hover:text-white transition-all active:scale-95"
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                }}
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                Try Again
+              </button>
+              <button
+                onClick={onClose}
+                className="flex-1 flex items-center justify-center py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95"
+                style={{
+                  background: "linear-gradient(135deg,#c9a84c,#a8722a)",
+                  color: "#0a0a0f",
+                  boxShadow: "0 6px 18px rgba(201,168,76,0.3)",
+                }}
+              >
+                ✦ Pick This Look
+              </button>
+            </div>
+          </div>
+
+          {/* RIGHT 60% — Result */}
+          <div className="flex flex-col gap-1 min-h-0" style={{ width: "60%" }}>
+            <div className="flex items-center gap-2">
+              <div
+                className="h-px flex-1"
+                style={{
+                  background:
+                    "linear-gradient(to right,rgba(201,168,76,0.4),transparent)",
+                }}
+              />
+              <span
+                className="text-[10px] font-black uppercase tracking-[0.3em]"
+                style={{ color: "#c9a84c" }}
+              >
+                ✦ Your Look ✦
+              </span>
+              <div
+                className="h-px flex-1"
+                style={{
+                  background:
+                    "linear-gradient(to left,rgba(201,168,76,0.4),transparent)",
+                }}
+              />
+            </div>
+            <div
+              className="flex-1 min-h-0 rounded-2xl overflow-hidden relative"
+              style={{
+                border: "1px solid rgba(201,168,76,0.25)",
+                boxShadow: "0 0 40px rgba(201,168,76,0.08)",
+              }}
+            >
+              <img
+                src={result}
+                className="w-full h-full object-contain"
+                alt="Try-on result"
+                style={{ background: "#0d0d14" }}
+              />
+              <div
+                className="absolute bottom-3 right-3 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest"
+                style={{
+                  background: "rgba(201,168,76,0.15)",
+                  border: "1px solid rgba(201,168,76,0.3)",
+                  color: "#c9a84c",
+                }}
+              >
+                AI Generated
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
+      <button
+        onClick={onClose}
+        className="absolute top-6 right-6 bg-white px-4 py-2 rounded z-10"
+      >
+        Close{" "}
+      </button>
+
+      {/* Quality Selector */}
+      <div className="absolute top-6 left-6 z-10">
+        <div className="relative">
+          <button
+            onClick={() => setShowQualityMenu(!showQualityMenu)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium transition-all"
+            style={{
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              backdropFilter: "blur(10px)",
+            }}
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+              />
+            </svg>
+            <span className="text-sm">Quality: {quality}</span>
+            <svg
+              className={`w-4 h-4 transition-transform ${showQualityMenu ? "rotate-180" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </button>
+
+          {showQualityMenu && (
+            <div
+              className="absolute top-full left-0 mt-2 w-64 rounded-xl overflow-hidden"
+              style={{
+                background: "rgba(0,0,0,0.9)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                backdropFilter: "blur(20px)",
+              }}
+            >
+              {qualityOptions.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => {
+                    setQuality(option.value);
+                    setShowQualityMenu(false);
+                  }}
+                  className={`w-full px-4 py-3 text-left transition-all hover:bg-white/10 ${
+                    quality === option.value ? "bg-white/20" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-white font-medium">
+                        {option.label}
+                      </div>
+                      <div className="text-white/60 text-xs">
+                        {option.description}
+                      </div>
+                    </div>
+                    {quality === option.value && (
+                      <svg
+                        className="w-5 h-5 text-green-400"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="relative">
+        {capturedPreview ? (
+          <img
+            src={capturedPreview}
+            className="w-[500px] rounded-xl border-4 border-gray-600"
+          />
+        ) : (
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-[500px] rounded-xl border-4 border-gray-600"
+          />
+        )}
+
+        <canvas ref={canvasRef} className="hidden" />
+
+        <div className="absolute bottom-10 w-full text-center text-white text-lg">
+          {status}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default TryOn;
